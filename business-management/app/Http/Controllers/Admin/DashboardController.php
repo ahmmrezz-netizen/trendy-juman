@@ -15,6 +15,8 @@ class DashboardController extends Controller
         $data = [
             'totalProducts' => Product::count(),
             'totalClients' => Client::count(),
+            'totalOrders' => Purchase::count(),
+            'totalSales' => Purchase::sum('total_amount'),
             'totalStockQty' => Product::sum('available_qty'),
             'totalSoldQty' => Purchase::sum('qty'),
             'recentPurchases' => Purchase::with(['client', 'product'])

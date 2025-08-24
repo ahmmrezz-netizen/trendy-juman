@@ -13,12 +13,19 @@ class Product extends Model
         'name',
         'size',
         'color',
-        'available_qty'
+        'available_qty',
+        'image',
+        'added_by'
     ];
 
     public function purchases()
     {
         return $this->hasMany(Purchase::class);
+    }
+
+    public function user()
+    {
+        return $this->belongsTo(User::class, 'added_by');
     }
 
     public function getTotalSoldAttribute()

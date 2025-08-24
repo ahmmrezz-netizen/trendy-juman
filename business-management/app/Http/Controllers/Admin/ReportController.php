@@ -6,25 +6,110 @@ use App\Http\Controllers\Controller;
 use App\Models\Product;
 use App\Models\Client;
 use App\Models\Purchase;
+use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Response;
 
 class ReportController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
+        // Get all admins who have added products
+        $admins = User::whereHas('products')->get();
+        
+        // Filter products by admin if specified
+        $productsQuery = Product::with('user');
+        if ($request->filled('admin_id')) {
+            $productsQuery->where('added_by', $request->admin_id);
+        }
+        
+        // Regular users can only see their own products
+        if (!auth()->user()->is_super_admin) {
+            $productsQuery->where('added_by', auth()->id());
+        }
+        
+        $products = $productsQuery->get();
+        
+        // Prepare chart data for admin inventory
+        $chartData = $this->prepareAdminChartData($request->admin_id);
+        
         $data = [
+            'totalProducts' => Product::count(),
+            'totalClients' => Client::count(),
+            'totalOrders' => Purchase::count(),
+            'totalSoldQty' => Purchase::sum('qty'),
+            'lowStockCount' => Product::where('available_qty', '<', 10)->count(),
+            'activeClients' => Client::whereHas('purchases')->count(),
+            'topProducts' => Product::withCount('purchases')
+                ->withSum('purchases', 'qty')
+                ->orderBy('purchases_count', 'desc')
+                ->take(5)
+                ->get()
+                ->map(function ($product) {
+                    $product->total_sold = $product->purchases_sum_qty ?? 0;
+                    return $product;
+                }),
+            'topClients' => Client::withCount('purchases')
+                ->withSum('purchases', 'total_amount')
+                ->orderBy('purchases_sum_total_amount', 'desc')
+                ->take(5)
+                ->get()
+                ->map(function ($client) {
+                    $client->total_spent = $client->purchases_sum_total_amount ?? 0;
+                    $client->last_purchase_date = $client->purchases()->latest()->first()?->purchase_date;
+                    return $client;
+                }),
             'productReport' => $this->getProductReport(),
             'clientReport' => $this->getClientReport(),
-            'purchaseReport' => $this->getPurchaseReport()
+            'purchaseReport' => $this->getPurchaseReport(),
+            // Multi-admin inventory data
+            'admins' => $admins,
+            'products' => $products,
+            'chartData' => $chartData,
+            'selectedAdminId' => $request->admin_id
         ];
         
         return view('admin.reports.index', $data);
     }
 
+    private function prepareAdminChartData($adminId = null)
+    {
+        $query = Product::with('user')
+            ->selectRaw('added_by, SUM(available_qty) as total_qty, COUNT(*) as product_count')
+            ->groupBy('added_by');
+        
+        if ($adminId) {
+            $query->where('added_by', $adminId);
+        }
+        
+        // Regular users can only see their own data
+        if (!auth()->user()->is_super_admin) {
+            $query->where('added_by', auth()->id());
+        }
+        
+        $adminData = $query->get();
+        
+        $admins = [];
+        $totals = [];
+        
+        foreach ($adminData as $data) {
+            $user = User::find($data->added_by);
+            if ($user) {
+                $admins[] = $user->name;
+                $totals[] = $data->total_qty;
+            }
+        }
+        
+        return [
+            'admins' => $admins,
+            'totals' => $totals
+        ];
+    }
+
     public function products()
     {
-        $products = Product::withCount('purchases')
+        $products = Product::with('user')
+            ->withCount('purchases')
             ->withSum('purchases', 'qty')
             ->get()
             ->map(function ($product) {
@@ -50,7 +135,8 @@ class ReportController extends Controller
 
     public function exportProducts()
     {
-        $products = Product::withCount('purchases')
+        $products = Product::with('user')
+            ->withCount('purchases')
             ->withSum('purchases', 'qty')
             ->get()
             ->map(function ($product) {
@@ -60,7 +146,8 @@ class ReportController extends Controller
                     'Color' => $product->color,
                     'Available Qty' => $product->available_qty,
                     'Sold Qty' => $product->purchases_sum_qty ?? 0,
-                    'Total Purchases' => $product->purchases_count
+                    'Total Purchases' => $product->purchases_count,
+                    'Added By' => $product->user ? $product->user->name : 'Unknown'
                 ];
             });
 

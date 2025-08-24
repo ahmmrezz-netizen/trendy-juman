@@ -35,6 +35,23 @@
                             </div>
                             
                             <div class="col-md-6 mb-3">
+                                <label for="image" class="form-label">Product Image</label>
+                                @if($product->image)
+                                    <div class="mb-2">
+                                        <img src="{{ asset('storage/' . $product->image) }}" 
+                                             alt="{{ $product->name }}" 
+                                             class="rounded" 
+                                             style="width: 100px; height: 100px; object-fit: cover;">
+                                    </div>
+                                @endif
+                                <input type="file" class="filepond" id="image" name="image" 
+                                       accept="image/jpeg,image/png" data-max-file-size="2MB">
+                                @error('image')
+                                    <div class="invalid-feedback d-block">{{ $message }}</div>
+                                @enderror
+                            </div>
+                            
+                            <div class="col-md-6 mb-3">
                                 <label for="size" class="form-label">Size *</label>
                                 <select class="form-select @error('size') is-invalid @enderror" 
                                         id="size" name="size" required>
@@ -101,4 +118,37 @@
         </div>
     </div>
 </div>
+
+@push('scripts')
+<script>
+    // Register FilePond plugins
+    FilePond.registerPlugin(FilePondPluginImagePreview);
+    FilePond.registerPlugin(FilePondPluginFileValidateType);
+
+    // Initialize FilePond
+    FilePond.create(document.querySelector('input[type="file"]'), {
+        allowMultiple: false,
+        acceptedFileTypes: ['image/jpeg', 'image/png'],
+        maxFileSize: '2MB',
+        labelIdle: 'Drag & Drop your photo or <span class="filepond--label-action">Browse</span>',
+        labelFileProcessing: 'Uploading',
+        labelFileProcessingComplete: 'Upload complete',
+        labelTapToCancel: 'tap to cancel',
+        labelTapToRetry: 'tap to retry',
+        labelTapToUndo: 'tap to undo',
+        server: {
+            process: {
+                url: '{{ route("admin.products.upload") }}',
+                method: 'POST',
+                headers: {
+                    'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                },
+                onload: (response) => {
+                    return JSON.parse(response).filename;
+                }
+            }
+        }
+    });
+</script>
+@endpush
 @endsection

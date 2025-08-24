@@ -16,6 +16,7 @@ Route::prefix('admin')->name('admin.')->middleware(['auth'])->group(function () 
     
     // Products
     Route::resource('products', ProductController::class);
+    Route::post('products/upload', [ProductController::class, 'upload'])->name('products.upload');
     
     // Clients
     Route::resource('clients', ClientController::class);
